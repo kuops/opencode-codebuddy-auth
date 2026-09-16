@@ -94,7 +94,7 @@ interface RemoteConfigResponse {
   };
 }
 
-const DEFAULT_MODEL: RemoteModel = { id: "auto", name: "Auto", maxInputTokens: 168000, maxOutputTokens: 32000, supportsToolCall: true };
+const DEFAULT_MODEL: RemoteModel = { id: "auto", name: "Auto", maxInputTokens: 168000, maxOutputTokens: 32000, supportsToolCall: true, supportsImages: true };
 
 const DISCOVERY_TIMEOUT_MS = 5000;
 
@@ -107,7 +107,10 @@ function remoteModelToConfig(m: RemoteModel): Record<string, unknown> {
     entry.limit = { context: m.maxInputTokens ?? 0, output: m.maxOutputTokens ?? 0 };
   }
   if (m.supportsToolCall) entry.tool_call = true;
-  if (m.supportsImages) entry.attachment = true;
+  if (m.supportsImages) {
+    entry.attachment = true;
+    entry.modalities = { input: ["text", "image"], output: ["text"] };
+  }
   return entry;
 }
 
