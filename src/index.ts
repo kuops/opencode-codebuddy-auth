@@ -76,6 +76,33 @@ interface OpenAIRequest {
   [key: string]: unknown;
 }
 
+interface RemoteModelReasoning {
+  effort?: string;
+  summary?: string;
+  supportedEfforts?: string[];
+  canDisableThinking?: boolean;
+  defaultEffort?: string;
+}
+
+interface RemoteModelBadge {
+  color?: string | null;
+  display?: string | null;
+  label?: string | null;
+}
+
+interface RemoteModelPromotion {
+  enabled?: boolean;
+  modelIds?: string[];
+  priority?: number;
+  badge?: RemoteModelBadge | null;
+  schedule?: {
+    timezone?: string;
+    validFrom?: string;
+    validUntil?: string;
+    daily?: Array<{ start: string; end: string }>;
+  };
+}
+
 interface RemoteModel {
   id: string;
   name: string;
@@ -84,6 +111,11 @@ interface RemoteModel {
   supportsToolCall?: boolean;
   supportsImages?: boolean;
   supportsReasoning?: boolean;
+  onlyReasoning?: boolean;
+  reasoning?: RemoteModelReasoning;
+  credits?: string | null;
+  descriptionZh?: string | null;
+  badge?: RemoteModelBadge | null;
 }
 
 interface RemoteConfigResponse {
@@ -91,18 +123,38 @@ interface RemoteConfigResponse {
   data?: {
     agents?: Array<{ name: string; models?: string[] }>;
     models?: RemoteModel[];
+    modelPromotions?: RemoteModelPromotion[];
   };
 }
 
-const DEFAULT_MODEL: RemoteModel = { id: "auto", name: "Auto", maxInputTokens: 168000, maxOutputTokens: 32000, supportsToolCall: true, supportsImages: true };
+const DEFAULT_MODEL: RemoteModel = {
+  id: "auto",
+  name: "Auto",
+  maxInputTokens: 168000,
+  maxOutputTokens: 32000,
+  supportsToolCall: true,
+  supportsImages: true,
+  supportsReasoning: true,
+  onlyReasoning: true,
+  reasoning: { effort: "high", summary: "auto" },
+};
 
 const DISCOVERY_TIMEOUT_MS = 5000;
 
 let resolvedServerUrl = CONFIG.serverUrl;
 let resolvedDomain = CONFIG.domain;
 
+function formatCredits(credits?: string | null): string | undefined {
+  if (!credits) return undefined;
+  if (credits === "x0.00" || credits === "x0" || credits === "0.00") return "Free";
+  return credits;
+}
+
 function remoteModelToConfig(m: RemoteModel): Record<string, unknown> {
-  const entry: Record<string, unknown> = { name: m.name };
+  const creditLabel = formatCredits(m.credits);
+  const entry: Record<string, unknown> = {
+    name: creditLabel ? `${m.name} (${creditLabel})` : m.name,
+  };
   if (m.maxInputTokens || m.maxOutputTokens) {
     entry.limit = { context: m.maxInputTokens ?? 0, output: m.maxOutputTokens ?? 0 };
   }
@@ -111,7 +163,69 @@ function remoteModelToConfig(m: RemoteModel): Record<string, unknown> {
     entry.attachment = true;
     entry.modalities = { input: ["text", "image"], output: ["text"] };
   }
+  const supportsReasoning =
+    m.supportsReasoning ||
+    m.onlyReasoning ||
+    (m.reasoning?.supportedEfforts?.length ?? 0) > 0;
+  if (supportsReasoning) {
+    entry.reasoning = true;
+    if (m.supportsToolCall) {
+      entry.interleaved = { field: "reasoning_content" as const };
+    }
+
+    const options: Record<string, unknown> = {};
+    const reasoningEffort = m.reasoning?.effort ?? m.reasoning?.defaultEffort;
+    if (reasoningEffort) options.reasoningEffort = reasoningEffort;
+    if (m.reasoning?.summary) options.reasoning_summary = m.reasoning.summary;
+    if (Object.keys(options).length > 0) entry.options = options;
+  }
   return entry;
+}
+
+function timeToMinutes(value: string): number | undefined {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value);
+  if (!match) return undefined;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour > 23 || minute > 59) return undefined;
+  return hour * 60 + minute;
+}
+
+function isPromotionActive(promotion: RemoteModelPromotion, now = new Date()): boolean {
+  if (promotion.enabled === false) return false;
+  const from = promotion.schedule?.validFrom
+    ? Date.parse(promotion.schedule.validFrom)
+    : undefined;
+  const until = promotion.schedule?.validUntil
+    ? Date.parse(promotion.schedule.validUntil)
+    : undefined;
+  if (from !== undefined && !Number.isNaN(from) && now.getTime() < from) return false;
+  if (until !== undefined && !Number.isNaN(until) && now.getTime() >= until) return false;
+
+  const daily = promotion.schedule?.daily;
+  if (!daily?.length) return true;
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: promotion.schedule?.timezone || "UTC",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(now);
+    const hour = Number(parts.find((part) => part.type === "hour")?.value);
+    const minute = Number(parts.find((part) => part.type === "minute")?.value);
+    if (!Number.isFinite(hour) || !Number.isFinite(minute)) return false;
+    const current = hour * 60 + minute;
+    return daily.some((range) => {
+      const start = timeToMinutes(range.start);
+      const end = timeToMinutes(range.end);
+      if (start === undefined || end === undefined) return false;
+      return start <= end
+        ? current >= start && current < end
+        : current >= start || current < end;
+    });
+  } catch {
+    return false;
+  }
 }
 
 async function fetchRemoteModels(accessToken: string): Promise<RemoteModel[]> {
@@ -136,10 +250,25 @@ async function fetchRemoteModels(accessToken: string): Promise<RemoteModel[]> {
   if (body.code !== 0 || !body.data) return [];
   const allModels = body.data.models || [];
   const modelMap = new Map(allModels.map((m) => [m.id, m]));
+  const promotionBadges = new Map<string, RemoteModelBadge>();
+  for (const promotion of [...(body.data.modelPromotions || [])].sort(
+    (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
+  )) {
+    if (!promotion.badge?.label || !isPromotionActive(promotion)) continue;
+    for (const modelId of promotion.modelIds || []) {
+      if (!promotionBadges.has(modelId)) promotionBadges.set(modelId, promotion.badge);
+    }
+  }
   const craftAgent = (body.data.agents || []).find((a) => a.name === CONFIG.agentIntent);
   const craftIds = craftAgent?.models || [];
   if (craftIds.length === 0) return [DEFAULT_MODEL];
-  return craftIds.map((id) => modelMap.get(id)).filter((m): m is RemoteModel => !!m?.supportsToolCall);
+  return craftIds
+    .map((id) => {
+      const model = modelMap.get(id);
+      const badge = promotionBadges.get(id);
+      return model && badge && !model.badge ? { ...model, badge } : model;
+    })
+    .filter((m): m is RemoteModel => !!m?.supportsToolCall);
 }
 
 function generateUuid(): string {
@@ -244,6 +373,68 @@ function buildAuthHeaders(
   if (modelId) headers["X-Model-ID"] = modelId;
 
   return headers;
+}
+
+function normalizeSseLine(line: string): string {
+  const carriageReturn = line.endsWith("\r") ? "\r" : "";
+  const content = carriageReturn ? line.slice(0, -1) : line;
+  const match = /^(\s*data:\s*)(.+)$/.exec(content);
+  if (!match || match[2] === "[DONE]") return line;
+
+  try {
+    const data = JSON.parse(match[2]) as Record<string, unknown>;
+    if (!Array.isArray(data.choices)) return line;
+    let changed = false;
+    for (const choice of data.choices) {
+      if (!choice || typeof choice !== "object") continue;
+      const delta = (choice as Record<string, unknown>).delta;
+      if (!delta || typeof delta !== "object" || Array.isArray(delta)) continue;
+      const record = delta as Record<string, unknown>;
+      if (Array.isArray(record.tool_calls) && record.tool_calls.length === 0) {
+        delete record.tool_calls;
+        changed = true;
+      }
+    }
+    if (!changed) return line;
+    return `${match[1]}${JSON.stringify(data)}${carriageReturn}`;
+  } catch {
+    return line;
+  }
+}
+
+function normalizeSseResponse(response: Response): Response {
+  if (!response.body || !response.headers.get("content-type")?.includes("text/event-stream")) {
+    return response;
+  }
+
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let buffer = "";
+  const body = response.body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        buffer += decoder.decode(chunk, { stream: true });
+        let newline = buffer.indexOf("\n");
+        while (newline !== -1) {
+          const line = buffer.slice(0, newline);
+          buffer = buffer.slice(newline + 1);
+          controller.enqueue(encoder.encode(`${normalizeSseLine(line)}\n`));
+          newline = buffer.indexOf("\n");
+        }
+      },
+      flush(controller) {
+        buffer += decoder.decode();
+        if (buffer) controller.enqueue(encoder.encode(normalizeSseLine(buffer)));
+      },
+    }),
+  );
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 function sleep(ms: number): Promise<void> {
@@ -358,6 +549,7 @@ export const CodeBuddyAuthPlugin: Plugin = async (input) => {
         | undefined;
       if (!provider) return;
       const opts = (provider.options || {}) as Record<string, unknown>;
+      provider.options = opts;
       const configuredBase = typeof opts.baseURL === "string" ? opts.baseURL : undefined;
       if (configuredBase) {
         try {
@@ -396,6 +588,35 @@ export const CodeBuddyAuthPlugin: Plugin = async (input) => {
       if (discovered.length === 0) {
         discovered = [DEFAULT_MODEL];
       }
+
+      const tuiModels = Object.fromEntries(
+        discovered.flatMap((m) => {
+          const descriptionZh = m.descriptionZh?.trim();
+          const label = m.badge?.label?.trim();
+          if (!descriptionZh && !label) return [];
+          return [
+            [
+              m.id,
+              {
+                ...(descriptionZh ? { descriptionZh } : {}),
+                ...(label
+                  ? {
+                      badge: {
+                        label,
+                        ...(m.badge?.color ? { color: m.badge.color } : {}),
+                      },
+                    }
+                  : {}),
+              },
+            ],
+          ];
+        }),
+      );
+      const tui =
+        opts.tui && typeof opts.tui === "object" && !Array.isArray(opts.tui)
+          ? (opts.tui as Record<string, unknown>)
+          : {};
+      opts.tui = { ...tui, models: tuiModels };
 
       for (const m of discovered) {
         if (models[m.id]) continue;
@@ -504,7 +725,7 @@ export const CodeBuddyAuthPlugin: Plugin = async (input) => {
               });
             }
 
-            return response;
+            return normalizeSseResponse(response);
           },
         };
       },

@@ -3,6 +3,8 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "jsx": "react-jsx",
+    "jsxImportSource": "@opentui/solid",
     "outDir": "dist",
     "rootDir": "src",
     "declaration": true,

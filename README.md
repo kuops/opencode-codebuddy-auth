@@ -71,6 +71,21 @@ OpenCode 插件，用于 CodeBuddy (IOA) 认证。通过浏览器 OAuth 登录�
 
 > 插件通过 `config` hook 在启动时动态从 CodeBuddy API (`GET /v3/config`) 获取 craft agent 可用模型，自动注入到 `provider.codebuddy.models`。未登录时 fallback 为 `auto` 默认模型。如需覆盖，可在 `provider.codebuddy.models` 中手动声明，插件不会覆盖已有条目。
 
+### TUI 侧边栏
+
+插件包含独立的 TUI 入口，可在会话右侧栏显示当前 CodeBuddy 模型和活动徽标。模型信息默认展开，点击箭头可收起中文描述；badge 从 `/v3/config` 的 `modelPromotions` 中按有效期和优先级匹配，并使用接口返回的颜色。通过 OpenCode 插件安装命令安装时，`package.json` 中的 TUI 默认配置会由 OpenCode 写入 `tui.json`。
+
+手动配置时，在 `~/.config/opencode/tui.json`（或项目 `.opencode/tui.json`）加入：
+
+```json
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "plugin": ["opencode-codebuddy-auth"]
+}
+```
+
+插件本身不会创建或改写 `tui.json`。修改后需要重启 OpenCode。
+
 ## 登录
 
 ```bash
@@ -90,6 +105,18 @@ opencode models codebuddy
 
 IOA 登录后，config hook 会通过 `GET /v3/config` 实时获取 craft agent 可用模型并自动注入。
 
+查看插件最终注入的模型配置：
+
+```bash
+opencode debug config | jq '.provider.codebuddy'
+```
+
+模型名称会显示接口返回的积分倍率：
+
+- `x0.00` 显示为 `Free`，例如 `Hy3 (Free)`
+- 其它值原样显示，例如 `Deepseek-V4-Pro (x0.13)`
+- 未返回 `credits` 的模型保持原名称
+
 #### craft agent 支持的模型（来自 /v3/config 接口，可能随时更新）
 
 | 模型 ID | 名称 | 上下文 | 图片 | 推理 |
@@ -105,6 +132,29 @@ IOA 登录后，config hook 会通过 `GET /v3/config` 实时获取 craft agent 
 | `deepseek-v4-pro` | DeepSeek-V4-Pro | 1M | Yes | Yes |
 | `deepseek-v4-flash` | DeepSeek-V4-Flash | 1M | Yes | Yes |
 | `deepseek-v3-2-volc` | DeepSeek-V3.2 | 96K | Yes | Yes |
+
+### 推理（Reasoning）支持
+
+插件为支持推理的动态模型注入 `reasoning: true` 和 `interleaved: { field: "reasoning_content" }`。同时将 `/v3/config` 返回的 `reasoning.effort`（新格式回退 `reasoning.defaultEffort`）与 `reasoning.summary` 写入模型 `options`，由 OpenCode 的 `@ai-sdk/openai-compatible` 标准链路生成请求体中的 `reasoning_effort` 和 `reasoning_summary`，不在 fetch 拦截器中改写这两个字段。
+
+CodeBuddy 的 SSE reasoning chunk 会携带空的 `tool_calls: []`。当前 OpenAI-compatible 适配器会把字段存在误判为工具调用开始，导致 reasoning 被拆成多个片段。插件仅删除 `choices[].delta.tool_calls` 的空数组；非空工具调用和其它响应字段保持不变。
+
+#### 命令行调试
+
+使用 JSON 事件流检查 reasoning 是否连续：
+
+```bash
+opencode run --model codebuddy/hy3 --format json --thinking '只回答 OK'
+```
+
+输出中应包含连续的 `"type":"reasoning"` 事件，随后是 `"type":"text"`。验证真实工具调用：
+
+```bash
+opencode run --model codebuddy/hy3 --format json --thinking \
+  '读取当前目录的 package.json，只告诉我 version 字段。'
+```
+
+输出中应包含 `"type":"tool_use"`，工具完成后继续生成最终文本。
 
 #### 动态获取模型列表
 
@@ -188,12 +238,12 @@ OpenCode CLI
   └─ 对话流程 → 拦截请求
                 附加认证 headers（Authorization, B3 追踪, X-Model-ID 等）
                 转发到 CodeBuddy /v2/chat/completions
-                直接透传 OpenAI 兼容 SSE 响应
+                规范化空 tool_calls 后透传 OpenAI 兼容 SSE 响应
 ```
 
 - **自定义 fetch** 拦截所有 `/chat/completions` 请求，绕过 AI SDK 默认认证
 - **自动 token 刷新** — 遇到 401/403 时自动刷新 token 后重试
-- **无需 SSE 转换** — API 已直接返回标准 OpenAI 格式
+- **最小 SSE 规范化** — 仅删除 `delta.tool_calls: []`，避免适配器错误拆分 reasoning；非空工具调用和其它字段保持不变
 
 ## 开发
 
@@ -201,6 +251,35 @@ OpenCode CLI
 npm install
 npm run build
 ```
+
+### 当前目录本地加载
+
+在项目目录创建 `.opencode/opencode.json`，加载 server 插件：
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["file:///root/opencode-codebuddy-auth"]
+}
+```
+
+创建 `.opencode/tui.json`，加载右侧栏 TUI 插件：
+
+```json
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "plugin": ["file:///root/opencode-codebuddy-auth"]
+}
+```
+
+修改源码后重新构建，并完全退出后重启 OpenCode：
+
+```bash
+npm run build
+opencode
+```
+
+使用 package 根目录而不是单独的 `dist/index.js`，可以同时验证 `package.json` 中的 `./server` 和 `./tui` exports。若直接加载构建文件，则分别使用 `dist/index.js` 和 `dist/tui.js`。
 
 ## 许可证
 
