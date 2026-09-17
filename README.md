@@ -53,16 +53,20 @@ OpenCode 插件，用于 CodeBuddy (IOA) 认证。通过浏览器 OAuth 登录�
       },
       "models": {
         "auto":                    { "name": "Auto", "contextLength": 168000 },
-        "hy3-preview-agent":       { "name": "Hy3-preview", "contextLength": 192000 },
-        "glm-5v-turbo":            { "name": "GLM-5v-Turbo", "contextLength": 200000 },
+        "hy4-preview-f":           { "name": "Hy4 preview", "contextLength": 1000000 },
+        "hy3":                     { "name": "Hy3", "contextLength": 192000 },
+        "hy3-x":                   { "name": "Hy3", "contextLength": 192000 },
+        "deepseek-v4.1-flash":     { "name": "Deepseek-V4.1-Flash", "contextLength": 1000000 },
+        "deepseek-v4-pro":         { "name": "Deepseek-V4-Pro", "contextLength": 1000000 },
+        "glm-5.3":                 { "name": "GLM-5.3", "contextLength": 1000000 },
+        "glm-5.3-flash":           { "name": "GLM-5.3-Flash", "contextLength": 1000000 },
+        "glm-5.2":                 { "name": "GLM-5.2", "contextLength": 1000000 },
         "glm-5.1":                 { "name": "GLM-5.1", "contextLength": 200000 },
-        "glm-5.0-turbo":           { "name": "GLM-5.0-Turbo", "contextLength": 200000 },
-        "glm-4.6":                 { "name": "GLM-4.6", "contextLength": 168000 },
+        "glm-5v-turbo":            { "name": "GLM-5v-Turbo", "contextLength": 200000 },
+        "kimi-k3-1":               { "name": "Kimi-K3", "contextLength": 1000000 },
+        "kimi-k2.7":               { "name": "Kimi-K2.7-Code", "contextLength": 256000 },
         "kimi-k2.6":               { "name": "Kimi-K2.6", "contextLength": 256000 },
-        "kimi-k2.5":               { "name": "Kimi-K2.5", "contextLength": 256000 },
-        "deepseek-v4-pro":         { "name": "DeepSeek-V4-Pro", "contextLength": 1000000 },
-        "deepseek-v4-flash":       { "name": "DeepSeek-V4-Flash", "contextLength": 1000000 },
-        "deepseek-v3-2-volc":      { "name": "DeepSeek-V3.2", "contextLength": 96000 }
+        "minimax-m3":              { "name": "MiniMax-M3", "contextLength": 512000 }
       }
     }
   }
@@ -122,16 +126,20 @@ opencode debug config | jq '.provider.codebuddy'
 | 模型 ID | 名称 | 上下文 | 图片 | 推理 |
 |---------|------|--------|------|------|
 | `auto` | Auto | 168K | Yes | Yes |
-| `hy3-preview-agent` | Hy3-preview | 192K | Yes | Yes |
-| `glm-5v-turbo` | GLM-5v-Turbo | 200K | Yes | Yes |
+| `hy4-preview-f` | Hy4 preview | 1M | Yes | Yes |
+| `hy3` | Hy3 | 192K | Yes | Yes |
+| `hy3-x` | Hy3 | 192K | Yes | Yes |
+| `deepseek-v4.1-flash` | Deepseek-V4.1-Flash | 1M | Yes | Yes |
+| `deepseek-v4-pro` | Deepseek-V4-Pro | 1M | Yes | Yes |
+| `glm-5.3` | GLM-5.3 | 1M | Yes | Yes |
+| `glm-5.3-flash` | GLM-5.3-Flash | 1M | Yes | Yes |
+| `glm-5.2` | GLM-5.2 | 1M | Yes | Yes |
 | `glm-5.1` | GLM-5.1 | 200K | Yes | Yes |
-| `glm-5.0-turbo` | GLM-5.0-Turbo | 200K | Yes | Yes |
-| `glm-4.6` | GLM-4.6 | 168K | No | - |
+| `glm-5v-turbo` | GLM-5v-Turbo | 200K | Yes | Yes |
+| `kimi-k3-1` | Kimi-K3 | 1M | Yes | Yes |
+| `kimi-k2.7` | Kimi-K2.7-Code | 256K | Yes | Yes |
 | `kimi-k2.6` | Kimi-K2.6 | 256K | Yes | Yes |
-| `kimi-k2.5` | Kimi-K2.5 | 256K | Yes | Yes |
-| `deepseek-v4-pro` | DeepSeek-V4-Pro | 1M | Yes | Yes |
-| `deepseek-v4-flash` | DeepSeek-V4-Flash | 1M | Yes | Yes |
-| `deepseek-v3-2-volc` | DeepSeek-V3.2 | 96K | Yes | Yes |
+| `minimax-m3` | MiniMax-M3 | 512K | Yes | Yes |
 
 ### 推理（Reasoning）支持
 
@@ -184,7 +192,7 @@ curl -H 'Accept: application/json, text/plain, */*' \
 
 ```bash
 # 强制使用指定模型（忽略 OpenCode 模型选择）
-export CODEBUDDY_DEFAULT_MODEL=deepseek-v3-2-volc
+export CODEBUDDY_DEFAULT_MODEL=deepseek-v4.1-flash
 
 # 覆盖企业/租户信息（不设置则从 JWT 自动提取）
 export CODEBUDDY_TENANT_ID=xxx
