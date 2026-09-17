@@ -56,21 +56,21 @@ OpenCode 插件，用于 CodeBuddy (IOA) 认证。通过浏览器 OAuth 登录�
         "setCacheKey": true
       },
       "models": {
-        "auto":                    { "name": "Auto", "contextLength": 168000 },
-        "hy4-preview-f":           { "name": "Hy4 preview", "contextLength": 1000000 },
-        "hy3":                     { "name": "Hy3", "contextLength": 192000 },
-        "hy3-x":                   { "name": "Hy3", "contextLength": 192000 },
-        "deepseek-v4.1-flash":     { "name": "Deepseek-V4.1-Flash", "contextLength": 1000000 },
-        "deepseek-v4-pro":         { "name": "Deepseek-V4-Pro", "contextLength": 1000000 },
-        "glm-5.3":                 { "name": "GLM-5.3", "contextLength": 1000000 },
-        "glm-5.3-flash":           { "name": "GLM-5.3-Flash", "contextLength": 1000000 },
-        "glm-5.2":                 { "name": "GLM-5.2", "contextLength": 1000000 },
-        "glm-5.1":                 { "name": "GLM-5.1", "contextLength": 200000 },
-        "glm-5v-turbo":            { "name": "GLM-5v-Turbo", "contextLength": 200000 },
-        "kimi-k3-1":               { "name": "Kimi-K3", "contextLength": 1000000 },
-        "kimi-k2.7":               { "name": "Kimi-K2.7-Code", "contextLength": 256000 },
-        "kimi-k2.6":               { "name": "Kimi-K2.6", "contextLength": 256000 },
-        "minimax-m3":              { "name": "MiniMax-M3", "contextLength": 512000 }
+        "auto": { "name": "Auto", "limit": { "context": 168000, "output": 32000 } },
+        "hy4-preview-f": { "name": "Hy4 preview", "limit": { "context": 1000000, "output": 32000 } },
+        "hy3": { "name": "Hy3", "limit": { "context": 192000, "output": 32000 } },
+        "hy3-x": { "name": "Hy3", "limit": { "context": 192000, "output": 32000 } },
+        "deepseek-v4.1-flash": { "name": "Deepseek-V4.1-Flash", "limit": { "context": 1000000, "output": 32000 } },
+        "deepseek-v4-pro": { "name": "Deepseek-V4-Pro", "limit": { "context": 1000000, "output": 32000 } },
+        "glm-5.3": { "name": "GLM-5.3", "limit": { "context": 1000000, "output": 32000 } },
+        "glm-5.3-flash": { "name": "GLM-5.3-Flash", "limit": { "context": 1000000, "output": 32000 } },
+        "glm-5.2": { "name": "GLM-5.2", "limit": { "context": 1000000, "output": 32000 } },
+        "glm-5.1": { "name": "GLM-5.1", "limit": { "context": 200000, "output": 32000 } },
+        "glm-5v-turbo": { "name": "GLM-5v-Turbo", "limit": { "context": 200000, "output": 32000 } },
+        "kimi-k3-1": { "name": "Kimi-K3", "limit": { "context": 1000000, "output": 32000 } },
+        "kimi-k2.7": { "name": "Kimi-K2.7-Code", "limit": { "context": 256000, "output": 32000 } },
+        "kimi-k2.6": { "name": "Kimi-K2.6", "limit": { "context": 256000, "output": 32000 } },
+        "minimax-m3": { "name": "MiniMax-M3", "limit": { "context": 512000, "output": 32000 } }
       }
     }
   }
@@ -110,6 +110,8 @@ opencode models codebuddy
 
 # 交互式选择（OpenCode 内输入 /model 搜索 codebuddy）
 ```
+
+## 查看最终配置
 
 IOA 登录后，config hook 会通过 `GET /v3/config` 实时获取 craft agent 可用模型并自动注入。
 
