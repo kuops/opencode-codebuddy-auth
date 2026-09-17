@@ -1,6 +1,6 @@
 {
   "name": "opencode-codebuddy-auth",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "OpenCode plugin for CodeBuddy (IOA) authentication",
   "type": "module",
   "main": "./dist/index.js",
