@@ -1,9 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui";
 import { RGBA } from "@opentui/core";
-import { unwatchFile, watchFile } from "node:fs";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js";
 
 const PROVIDER_ID = "codebuddy";
@@ -13,12 +10,18 @@ interface Badge {
   color?: string;
 }
 
+interface Hover {
+  textZh: string;
+}
+
 interface ModelMetadata {
   descriptionZh?: string;
   badge?: Badge;
+  hover?: Hover;
 }
 
-interface ModelRef {
+interface SelectedModel {
+  sessionID: string;
   providerID: string;
   modelID: string;
 }
@@ -42,8 +45,12 @@ function parseMetadata(value: unknown): ModelMetadata | undefined {
     : undefined;
   const descriptionZh =
     typeof record.descriptionZh === "string" ? record.descriptionZh : undefined;
-  if (!descriptionZh && !badge) return undefined;
-  return { descriptionZh, badge };
+  const hoverRecord = asRecord(record.hover);
+  const hoverTextZh =
+    typeof hoverRecord?.textZh === "string" ? hoverRecord.textZh : undefined;
+  const hover = hoverTextZh ? { textZh: hoverTextZh } : undefined;
+  if (!descriptionZh && !badge && !hover) return undefined;
+  return { descriptionZh, badge, hover };
 }
 
 function badgeColor(value: string | undefined, fallback: RGBA): RGBA {
@@ -66,66 +73,46 @@ function badgeTextColor(value: string | undefined, fallback: RGBA): RGBA {
 
 function ModelInfo(props: { api: TuiPluginApi; sessionID: string }) {
   const theme = () => props.api.theme.current;
-  const [selected, setSelected] = createSignal<ModelRef>();
+  const [selected, setSelected] = createSignal<SelectedModel>();
   const [open, setOpen] = createSignal(true);
 
+  const updateSelected = (model: SelectedModel) => {
+    setSelected((current) =>
+      current?.sessionID === model.sessionID &&
+      current.providerID === model.providerID &&
+      current.modelID === model.modelID
+        ? current
+        : model,
+    );
+  };
+
+  let initialized = false;
+  createEffect(() => {
+    if (initialized) return;
+    const messages = props.api.state.session.messages(props.sessionID);
+    const message = [...messages].reverse().find((item) => item.role === "user");
+    if (!message) return;
+    initialized = true;
+    updateSelected({ sessionID: props.sessionID, ...message.model });
+  });
+
   onMount(() => {
-    let modelFile: string | undefined;
-    let retry: ReturnType<typeof setTimeout> | undefined;
-    let active = true;
-
-    const refresh = async (file: string) => {
-      try {
-        const state = asRecord(JSON.parse(await readFile(file, "utf8")));
-        const recent = state?.recent;
-        if (!Array.isArray(recent)) return;
-        const model = asRecord(recent[0]);
-        if (typeof model?.providerID !== "string" || typeof model.modelID !== "string") return;
-        if (active) setSelected({ providerID: model.providerID, modelID: model.modelID });
-      } catch {}
-    };
-
-    const changed = () => {
-      if (modelFile) void refresh(modelFile);
-    };
-    const start = () => {
-      const stateDir = props.api.state.path.state;
-      if (!stateDir) {
-        retry = setTimeout(start, 100);
-        return;
+    const unsubscribeMessage = props.api.event.on("message.updated", (event) => {
+      if (event.properties.sessionID !== props.sessionID) return;
+      const message = event.properties.info;
+      if (message.role === "user") {
+        updateSelected({ sessionID: props.sessionID, ...message.model });
       }
-      modelFile = path.join(stateDir, "model.json");
-      void refresh(modelFile);
-      watchFile(modelFile, { interval: 250, persistent: false }, changed);
-    };
+    });
 
-    start();
     onCleanup(() => {
-      active = false;
-      if (retry) clearTimeout(retry);
-      if (modelFile) unwatchFile(modelFile, changed);
+      unsubscribeMessage();
     });
   });
 
   const current = createMemo(() => {
-    const messages = props.api.state.session.messages(props.sessionID);
-    const message = [...messages].reverse().find((item) => item.role === "user");
-    const sessionApi = props.api.state.session as unknown as {
-      get?: (sessionID: string) => unknown;
-    };
-    const session = asRecord(sessionApi.get?.(props.sessionID));
-    const sessionModel = asRecord(session?.model);
-    const sessionModelID =
-      typeof sessionModel?.id === "string"
-        ? sessionModel.id
-        : typeof sessionModel?.modelID === "string"
-          ? sessionModel.modelID
-          : undefined;
-    const sessionRef =
-      typeof sessionModel?.providerID === "string" && sessionModelID
-        ? { providerID: sessionModel.providerID, modelID: sessionModelID }
-        : undefined;
-    const model = selected() ?? sessionRef ?? message?.model;
+    const live = selected();
+    const model = live?.sessionID === props.sessionID ? live : undefined;
     if (!model || model.providerID !== PROVIDER_ID) return undefined;
 
     const provider = props.api.state.provider.find((item) => item.id === PROVIDER_ID);
@@ -179,6 +166,9 @@ function ModelInfo(props: { api: TuiPluginApi; sessionID: string }) {
           <Show when={open() && model().descriptionZh}>
             {(description) => <text fg={theme().textMuted}>{description()}</text>}
           </Show>
+          <Show when={model().hover?.textZh}>
+            {(text) => <text fg={theme().textMuted}>{text()}</text>}
+          </Show>
         </box>
       )}
     </Show>
@@ -186,7 +176,7 @@ function ModelInfo(props: { api: TuiPluginApi; sessionID: string }) {
 }
 
 const tui: TuiPlugin = async (api, options) => {
-  if (options?.enabled === false) return;
+  if (options?.enabled !== true) return;
   api.slots.register({
     order: 150,
     slots: {

@@ -90,11 +90,16 @@ interface RemoteModelBadge {
   label?: string | null;
 }
 
+interface RemoteModelHover {
+  textZh?: string | null;
+}
+
 interface RemoteModelPromotion {
   enabled?: boolean;
   modelIds?: string[];
   priority?: number;
   badge?: RemoteModelBadge | null;
+  hover?: RemoteModelHover | null;
   schedule?: {
     timezone?: string;
     validFrom?: string;
@@ -116,6 +121,7 @@ interface RemoteModel {
   credits?: string | null;
   descriptionZh?: string | null;
   badge?: RemoteModelBadge | null;
+  hover?: RemoteModelHover | null;
 }
 
 interface RemoteConfigResponse {
@@ -251,12 +257,18 @@ async function fetchRemoteModels(accessToken: string): Promise<RemoteModel[]> {
   const allModels = body.data.models || [];
   const modelMap = new Map(allModels.map((m) => [m.id, m]));
   const promotionBadges = new Map<string, RemoteModelBadge>();
+  const promotionHovers = new Map<string, RemoteModelHover>();
   for (const promotion of [...(body.data.modelPromotions || [])].sort(
     (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
   )) {
-    if (!promotion.badge?.label || !isPromotionActive(promotion)) continue;
+    if (!isPromotionActive(promotion)) continue;
     for (const modelId of promotion.modelIds || []) {
-      if (!promotionBadges.has(modelId)) promotionBadges.set(modelId, promotion.badge);
+      if (promotion.badge?.label && !promotionBadges.has(modelId)) {
+        promotionBadges.set(modelId, promotion.badge);
+      }
+      if (promotion.hover?.textZh && !promotionHovers.has(modelId)) {
+        promotionHovers.set(modelId, promotion.hover);
+      }
     }
   }
   const craftAgent = (body.data.agents || []).find((a) => a.name === CONFIG.agentIntent);
@@ -265,8 +277,14 @@ async function fetchRemoteModels(accessToken: string): Promise<RemoteModel[]> {
   return craftIds
     .map((id) => {
       const model = modelMap.get(id);
+      if (!model) return model;
       const badge = promotionBadges.get(id);
-      return model && badge && !model.badge ? { ...model, badge } : model;
+      const hover = promotionHovers.get(id);
+      return {
+        ...model,
+        ...(!model.badge && badge ? { badge } : {}),
+        ...(!model.hover && hover ? { hover } : {}),
+      };
     })
     .filter((m): m is RemoteModel => !!m?.supportsToolCall);
 }
@@ -593,7 +611,8 @@ export const CodeBuddyAuthPlugin: Plugin = async (input) => {
         discovered.flatMap((m) => {
           const descriptionZh = m.descriptionZh?.trim();
           const label = m.badge?.label?.trim();
-          if (!descriptionZh && !label) return [];
+          const hoverTextZh = m.hover?.textZh?.trim();
+          if (!descriptionZh && !label && !hoverTextZh) return [];
           return [
             [
               m.id,
@@ -607,6 +626,7 @@ export const CodeBuddyAuthPlugin: Plugin = async (input) => {
                       },
                     }
                   : {}),
+                ...(hoverTextZh ? { hover: { textZh: hoverTextZh } } : {}),
               },
             ],
           ];

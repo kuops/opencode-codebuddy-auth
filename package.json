@@ -14,7 +14,7 @@
       "import": "./dist/tui.js",
       "types": "./dist/tui.d.ts",
       "config": {
-        "enabled": true
+        "enabled": false
       }
     }
   },

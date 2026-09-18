@@ -2,10 +2,6 @@
 
 OpenCode 插件，用于 CodeBuddy (IOA) 认证。通过浏览器 OAuth 登录后，可在 OpenCode CLI 中使用 CodeBuddy 的对话模型。支持自动从 `/v3/config` 动态获取可用模型列表，支持国内版和国际版切换。
 
-<p align="center">
-  <img src="images/tui-sidebar.png" width="70%" alt="OpenCode 中的 CodeBuddy TUI 侧边栏" />
-</p>
-
 ## 安装
 
 在 `opencode.json` 中添加插件即可，三种配置方式任选其一：
@@ -79,20 +75,9 @@ OpenCode 插件，用于 CodeBuddy (IOA) 认证。通过浏览器 OAuth 登录�
 
 > 插件通过 `config` hook 在启动时动态从 CodeBuddy API (`GET /v3/config`) 获取 craft agent 可用模型，自动注入到 `provider.codebuddy.models`。未登录时 fallback 为 `auto` 默认模型。如需覆盖，可在 `provider.codebuddy.models` 中手动声明，插件不会覆盖已有条目。
 
-### TUI 侧边栏
+### ~~TUI 侧边栏~~（暂时停用）
 
-插件包含独立的 TUI 入口，可在会话右侧栏显示当前 CodeBuddy 模型和活动徽标。模型信息默认展开，点击箭头可收起中文描述；badge 从 `/v3/config` 的 `modelPromotions` 中按有效期和优先级匹配，并使用接口返回的颜色。通过 OpenCode 插件安装命令安装时，`package.json` 中的 TUI 默认配置会由 OpenCode 写入 `tui.json`。
-
-手动配置时，在 `~/.config/opencode/tui.json`（或项目 `.opencode/tui.json`）加入：
-
-```json
-{
-  "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["opencode-codebuddy-auth"]
-}
-```
-
-插件本身不会创建或改写 `tui.json`。修改后需要重启 OpenCode。
+> TUI 侧边栏因 OpenCode 当前未向插件公开实时模型选择状态，且可能触发渲染卡死，现已默认停用。源码暂时保留，等待上游提供稳定 API 后再恢复。
 
 ## 登录
 
@@ -277,15 +262,6 @@ npm run build
 }
 ```
 
-创建 `.opencode/tui.json`，加载右侧栏 TUI 插件：
-
-```json
-{
-  "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["file:///root/opencode-codebuddy-auth"]
-}
-```
-
 修改源码后重新构建，并完全退出后重启 OpenCode：
 
 ```bash
@@ -293,7 +269,7 @@ npm run build
 opencode
 ```
 
-使用 package 根目录而不是单独的 `dist/index.js`，可以同时验证 `package.json` 中的 `./server` 和 `./tui` exports。若直接加载构建文件，则分别使用 `dist/index.js` 和 `dist/tui.js`。
+使用 package 根目录而不是单独的 `dist/index.js`，可以验证 `package.json` 中的 `./server` export。TUI 入口目前默认停用。
 
 ## 许可证
 
