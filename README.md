@@ -75,9 +75,22 @@ OpenCode 插件，用于 CodeBuddy (IOA) 认证。通过浏览器 OAuth 登录�
 
 > 插件通过 `config` hook 在启动时动态从 CodeBuddy API (`GET /v3/config`) 获取 craft agent 可用模型，自动注入到 `provider.codebuddy.models`。未登录时 fallback 为 `auto` 默认模型。如需覆盖，可在 `provider.codebuddy.models` 中手动声明，插件不会覆盖已有条目。
 
-### ~~TUI 侧边栏~~（暂时停用）
+### TUI 模型目录
 
-> TUI 侧边栏因 OpenCode 当前未向插件公开实时模型选择状态，且可能触发渲染卡死，现已默认停用。源码暂时保留，等待上游提供稳定 API 后再恢复。
+TUI 侧边栏静态展示 craft agent 最终可用的 CodeBuddy 模型，不跟踪当前选择，也不访问会话状态。模型目录默认折叠，点击标题可展开；badge 会显示 promotion 和 tier（如“订阅优先”）信息。将鼠标移到模型名称上时，模型描述和活动说明会分别显示在该模型下方的边框中。
+
+通用 Context Usage 面板已拆分到独立项目 `opencode-context-sidebar`。
+
+通过 OpenCode 插件安装命令安装时，TUI 会默认启用。手动配置时，在 `~/.config/opencode/tui.json`（或项目 `.opencode/tui.json`）加入：
+
+```json
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "plugin": ["opencode-codebuddy-auth"]
+}
+```
+
+修改配置后需要完全退出并重新启动 OpenCode。
 
 ## 登录
 
@@ -269,7 +282,7 @@ npm run build
 opencode
 ```
 
-使用 package 根目录而不是单独的 `dist/index.js`，可以验证 `package.json` 中的 `./server` export。TUI 入口目前默认停用。
+使用 package 根目录而不是单独的 `dist/index.js`，可以同时验证 `package.json` 中的 `./server` 和 `./tui` exports。若直接加载构建文件，则分别使用 `dist/index.js` 和 `dist/tui.js`。
 
 ## 许可证
 

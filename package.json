@@ -1,6 +1,6 @@
 {
   "name": "opencode-codebuddy-auth",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "OpenCode plugin for CodeBuddy (IOA) authentication",
   "type": "module",
   "main": "./dist/index.js",
@@ -14,7 +14,7 @@
       "import": "./dist/tui.js",
       "types": "./dist/tui.d.ts",
       "config": {
-        "enabled": false
+        "enabled": true
       }
     }
   },
@@ -23,7 +23,7 @@
     "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
-    "@opencode-ai/plugin": ">=0.1.0",
+    "@opencode-ai/plugin": ">=1.4.0",
     "@opentui/core": ">=0.2.0",
     "@opentui/solid": ">=0.2.0",
     "solid-js": ">=1.9.0"

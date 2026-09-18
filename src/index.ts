@@ -98,6 +98,7 @@ interface RemoteModelPromotion {
   enabled?: boolean;
   modelIds?: string[];
   priority?: number;
+  tier?: string;
   badge?: RemoteModelBadge | null;
   hover?: RemoteModelHover | null;
   schedule?: {
@@ -130,6 +131,7 @@ interface RemoteConfigResponse {
     agents?: Array<{ name: string; models?: string[] }>;
     models?: RemoteModel[];
     modelPromotions?: RemoteModelPromotion[];
+    modelTiers?: RemoteModelPromotion[];
   };
 }
 
@@ -154,6 +156,20 @@ function formatCredits(credits?: string | null): string | undefined {
   if (!credits) return undefined;
   if (credits === "x0.00" || credits === "x0" || credits === "0.00") return "Free";
   return credits;
+}
+
+function remoteBadgeLabel(badge?: RemoteModelBadge | null): string | undefined {
+  return badge?.label?.trim() || undefined;
+}
+
+function remoteHoverText(hover?: RemoteModelHover | null): string | undefined {
+  return hover?.textZh?.trim() || undefined;
+}
+
+function modelTierBadgeColor(tier?: string): string | undefined {
+  if (tier === "standard" || tier === "trial") return "#00B159";
+  if (tier === "advanced" || tier === "flagship") return "#C0701F";
+  return undefined;
 }
 
 function remoteModelToConfig(m: RemoteModel): Record<string, unknown> {
@@ -225,7 +241,8 @@ function isPromotionActive(promotion: RemoteModelPromotion, now = new Date()): b
       const start = timeToMinutes(range.start);
       const end = timeToMinutes(range.end);
       if (start === undefined || end === undefined) return false;
-      return start <= end
+      if (start === end) return true;
+      return start < end
         ? current >= start && current < end
         : current >= start || current < end;
     });
@@ -258,15 +275,34 @@ async function fetchRemoteModels(accessToken: string): Promise<RemoteModel[]> {
   const modelMap = new Map(allModels.map((m) => [m.id, m]));
   const promotionBadges = new Map<string, RemoteModelBadge>();
   const promotionHovers = new Map<string, RemoteModelHover>();
-  for (const promotion of [...(body.data.modelPromotions || [])].sort(
+  const modelHighlights = [
+    ...(body.data.modelPromotions || []),
+    ...(body.data.modelTiers || []).map((tier) => {
+      const color = tier.badge?.color || modelTierBadgeColor(tier.tier);
+      return tier.badge && color
+        ? { ...tier, badge: { ...tier.badge, color } }
+        : tier;
+    }),
+  ];
+  for (const promotion of modelHighlights.sort(
     (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
   )) {
-    if (!isPromotionActive(promotion)) continue;
+    const active = isPromotionActive(promotion);
     for (const modelId of promotion.modelIds || []) {
-      if (promotion.badge?.label && !promotionBadges.has(modelId)) {
+      if (
+        (active || promotion.badge?.display === "always") &&
+        remoteBadgeLabel(promotion.badge) &&
+        promotion.badge &&
+        !promotionBadges.has(modelId)
+      ) {
         promotionBadges.set(modelId, promotion.badge);
       }
-      if (promotion.hover?.textZh && !promotionHovers.has(modelId)) {
+      if (
+        active &&
+        remoteHoverText(promotion.hover) &&
+        promotion.hover &&
+        !promotionHovers.has(modelId)
+      ) {
         promotionHovers.set(modelId, promotion.hover);
       }
     }
@@ -280,10 +316,20 @@ async function fetchRemoteModels(accessToken: string): Promise<RemoteModel[]> {
       if (!model) return model;
       const badge = promotionBadges.get(id);
       const hover = promotionHovers.get(id);
+      const resolvedBadge = remoteBadgeLabel(model.badge)
+        ? model.badge
+        : badge
+          ? { ...model.badge, ...badge }
+          : model.badge;
+      const resolvedHover = remoteHoverText(model.hover)
+        ? model.hover
+        : hover
+          ? { ...model.hover, ...hover }
+          : model.hover;
       return {
         ...model,
-        ...(!model.badge && badge ? { badge } : {}),
-        ...(!model.hover && hover ? { hover } : {}),
+        ...(resolvedBadge ? { badge: resolvedBadge } : {}),
+        ...(resolvedHover ? { hover: resolvedHover } : {}),
       };
     })
     .filter((m): m is RemoteModel => !!m?.supportsToolCall);
@@ -608,27 +654,25 @@ export const CodeBuddyAuthPlugin: Plugin = async (input) => {
       }
 
       const tuiModels = Object.fromEntries(
-        discovered.flatMap((m) => {
+        discovered.map((m) => {
           const descriptionZh = m.descriptionZh?.trim();
-          const label = m.badge?.label?.trim();
-          const hoverTextZh = m.hover?.textZh?.trim();
-          if (!descriptionZh && !label && !hoverTextZh) return [];
+          const label = remoteBadgeLabel(m.badge);
+          const hoverTextZh = remoteHoverText(m.hover);
           return [
-            [
-              m.id,
-              {
-                ...(descriptionZh ? { descriptionZh } : {}),
-                ...(label
-                  ? {
-                      badge: {
-                        label,
-                        ...(m.badge?.color ? { color: m.badge.color } : {}),
-                      },
-                    }
-                  : {}),
-                ...(hoverTextZh ? { hover: { textZh: hoverTextZh } } : {}),
-              },
-            ],
+            m.id,
+            {
+              name: m.name,
+              ...(descriptionZh ? { descriptionZh } : {}),
+              ...(label
+                ? {
+                    badge: {
+                      label,
+                      ...(m.badge?.color ? { color: m.badge.color } : {}),
+                    },
+                  }
+                : {}),
+              ...(hoverTextZh ? { hover: { textZh: hoverTextZh } } : {}),
+            },
           ];
         }),
       );
