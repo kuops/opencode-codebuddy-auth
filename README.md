@@ -2,6 +2,8 @@
 
 OpenCode 插件，用于 CodeBuddy (IOA) 认证。通过浏览器 OAuth 登录后，可在 OpenCode CLI 中使用 CodeBuddy 的对话模型。支持自动从 `/v3/config` 动态获取可用模型列表，支持国内版和国际版切换。
 
+> **OpenCode V2 用户：** 请使用 [OpenCode V2 安装与使用指南](opencode-v2.md)。本文其余配置示例主要面向 OpenCode V1。
+
 <p align="center">
   <img src="images/tui-sidebar.png" width="70%" alt="OpenCode 中的 CodeBuddy TUI 侧边栏" />
 </p>
