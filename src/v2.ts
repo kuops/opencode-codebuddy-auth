@@ -17,6 +17,7 @@ export interface RemoteModelLike {
     summary?: string;
     defaultEffort?: string;
     supportedEfforts?: string[];
+    canDisableThinking?: boolean;
   } | null;
   credits?: string | null;
   descriptionZh?: string | null;
@@ -88,10 +89,14 @@ const FALLBACK_MODEL: RemoteModelLike = {
   reasoning: { effort: "high", summary: "auto" },
 };
 
-type V2Model = Omit<ReturnType<typeof Model.Info.default>, "name" | "capabilities" | "limit"> & {
+type V2Model = Omit<
+  ReturnType<typeof Model.Info.default>,
+  "name" | "capabilities" | "limit" | "variants"
+> & {
   name: string;
   capabilities: { tools: boolean; input: string[]; output: string[] };
   limit: { context: number; output: number };
+  variants: Model.Variant[];
   settings?: Record<string, unknown>;
   body?: Record<string, unknown>;
   compatibility?: Model.Compatibility;
@@ -117,6 +122,21 @@ function toV2Model(m: RemoteModelLike, shared: CodeBuddyShared): V2Model {
   const effort = m.reasoning?.effort ?? m.reasoning?.defaultEffort;
   if (effort) settings.reasoningEffort = effort;
   if (m.reasoning?.summary) info.body = { reasoning_summary: m.reasoning.summary };
+  const supportedEfforts = Array.from(
+    new Set(
+      (m.reasoning?.supportedEfforts ?? [])
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0 && value !== "none"),
+    ),
+  );
+  const variantEfforts = [
+    ...(m.reasoning?.canDisableThinking ? ["none"] : []),
+    ...supportedEfforts,
+  ];
+  info.variants = variantEfforts.map((variantEffort) => ({
+    id: Model.VariantID.make(variantEffort),
+    settings: { reasoningEffort: variantEffort },
+  }));
   const supportsReasoning =
     m.supportsReasoning ||
     m.onlyReasoning ||
